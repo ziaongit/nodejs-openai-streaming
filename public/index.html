@@ -9,117 +9,160 @@
 
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      background: #f5f5f5;
+      background: #f0f2f5;
+      height: 100vh;
       display: flex;
-      justify-content: center;
-      padding: 2rem 1rem;
-      min-height: 100vh;
+      flex-direction: column;
+      align-items: center;
+      padding: 1.5rem 1rem;
     }
 
-    .container {
+    .chat-wrapper {
       width: 100%;
-      max-width: 680px;
+      max-width: 700px;
+      display: flex;
+      flex-direction: column;
+      height: 100%;
     }
 
     h1 {
-      font-size: 1.4rem;
-      color: #111;
-      margin-bottom: 1.5rem;
+      font-size: 1.2rem;
+      color: #333;
+      margin-bottom: 1rem;
+    }
+
+    #messages {
+      flex: 1;
+      overflow-y: auto;
+      background: white;
+      border: 1px solid #e0e0e0;
+      border-radius: 10px;
+      padding: 1rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+
+    .message {
+      max-width: 85%;
+      padding: 0.65rem 0.9rem;
+      border-radius: 10px;
+      line-height: 1.6;
+      font-size: 0.93rem;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    .user      { background: #0070f3; color: white; align-self: flex-end; }
+    .assistant { background: #f1f1f1; color: #111;   align-self: flex-start; }
+
+    .input-row {
+      display: flex;
+      gap: 0.5rem;
+      margin-top: 0.75rem;
+      align-items: flex-end;
     }
 
     textarea {
-      width: 100%;
-      height: 90px;
-      padding: 0.75rem;
+      flex: 1;
+      padding: 0.7rem;
       border: 1px solid #ddd;
-      border-radius: 6px;
-      font-size: 0.95rem;
-      resize: vertical;
+      border-radius: 8px;
+      font-size: 0.93rem;
       font-family: inherit;
+      resize: none;
+      height: 52px;
+      overflow-y: auto;
     }
 
     button {
-      margin-top: 0.6rem;
-      padding: 0.6rem 1.4rem;
-      background: #0070f3;
-      color: white;
+      padding: 0.65rem 1.2rem;
       border: none;
-      border-radius: 6px;
-      font-size: 0.95rem;
+      border-radius: 8px;
+      font-size: 0.93rem;
       cursor: pointer;
+      white-space: nowrap;
     }
 
-    button:disabled {
-      background: #aaa;
-      cursor: not-allowed;
-    }
+    #send          { background: #0070f3; color: white; }
+    #send:disabled { background: #aaa; cursor: not-allowed; }
+    #clear         { background: #f1f1f1; color: #555; }
 
-    #response {
-      margin-top: 1.5rem;
-      background: white;
-      border: 1px solid #e0e0e0;
-      border-radius: 6px;
-      padding: 1rem 1.2rem;
-      min-height: 120px;
-      white-space: pre-wrap;
-      line-height: 1.6;
-      font-size: 0.95rem;
-      color: #222;
-    }
-
-    #status {
-      font-size: 0.8rem;
-      color: #888;
-      margin-top: 0.5rem;
+    .status {
+      font-size: 0.78rem;
+      color: #aaa;
+      margin-top: 0.3rem;
+      min-height: 1rem;
     }
   </style>
 </head>
 <body>
-  <div class="container">
-    <h1>Real-Time AI Chat</h1>
-    <textarea id="input" placeholder="Ask something..."></textarea>
-    <br>
-    <button id="send">Send</button>
-    <p id="status"></p>
-    <div id="response"></div>
+  <div class="chat-wrapper">
+    <h1>AI Chat</h1>
+    <div id="messages"></div>
+    <p class="status" id="status"></p>
+    <div class="input-row">
+      <textarea id="input" placeholder="Ask something... (Ctrl+Enter to send)"></textarea>
+      <button id="send">Send</button>
+      <button id="clear">New Chat</button>
+    </div>
   </div>
 
   <script>
-    const sendBtn = document.getElementById('send');
-    const input = document.getElementById('input');
-    const output = document.getElementById('response');
-    const status = document.getElementById('status');
+    let sessionId = null;
 
-    sendBtn.addEventListener('click', async () => {
+    // Create a session on load; store the ID for every subsequent request
+    async function initSession() {
+      const res  = await fetch('/session', { method: 'POST' });
+      const data = await res.json();
+      sessionId  = data.sessionId;
+    }
+
+    function appendMessage(role, text) {
+      const div = document.createElement('div');
+      div.className = `message ${role}`;
+      div.textContent = text;
+      document.getElementById('messages').appendChild(div);
+      div.scrollIntoView({ behavior: 'smooth' });
+      return div;
+    }
+
+    document.getElementById('send').addEventListener('click', async () => {
+      const input   = document.getElementById('input');
       const message = input.value.trim();
-      if (!message) return;
+      if (!message || !sessionId) return;
 
+      const sendBtn = document.getElementById('send');
+      const status  = document.getElementById('status');
+
+      input.value      = '';
       sendBtn.disabled = true;
-      output.textContent = '';
       status.textContent = 'Generating...';
+
+      appendMessage('user', message);
+      const assistantBubble = appendMessage('assistant', '');
 
       try {
         const response = await fetch('/chat', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ message }),
+          body: JSON.stringify({ message, sessionId }),
         });
 
         if (!response.ok) {
           const err = await response.json();
-          output.textContent = `Error: ${err.error}`;
+          assistantBubble.textContent = `Error: ${err.error}`;
           return;
         }
 
-        const reader = response.body.getReader();
+        const reader  = response.body.getReader();
         const decoder = new TextDecoder();
 
         while (true) {
           const { value, done } = await reader.read();
           if (done) break;
 
-          const text = decoder.decode(value, { stream: true });
-          const lines = text.split('\n');
+          const lines = decoder.decode(value, { stream: true }).split('\n');
 
           for (const line of lines) {
             if (!line.startsWith('data: ')) continue;
@@ -127,35 +170,48 @@
             try {
               const data = JSON.parse(line.slice(6));
 
+              if (data.done)  { break; }
               if (data.error) {
-                output.textContent += `\n[Error: ${data.error}]`;
+                assistantBubble.textContent += `\n[Error: ${data.error}]`;
                 break;
               }
-
-              if (data.done) break;
-
               if (data.token) {
-                output.textContent += data.token;
+                assistantBubble.textContent += data.token;
+                assistantBubble.scrollIntoView({ behavior: 'smooth' });
               }
             } catch {
-              // Incomplete JSON chunk — skip and continue
+              // An SSE event can be split across two network chunks.
+              // The JSON.parse will throw on the incomplete fragment.
+              // Catching it here lets the next read deliver the rest.
             }
           }
         }
 
-        status.textContent = 'Done.';
+        status.textContent = '';
       } catch (err) {
-        output.textContent = `Request failed: ${err.message}`;
+        assistantBubble.textContent = `Request failed: ${err.message}`;
         status.textContent = '';
       } finally {
         sendBtn.disabled = false;
+        input.focus();
       }
     });
 
-    // Allow Ctrl+Enter to submit
-    input.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' && e.ctrlKey) sendBtn.click();
+    // Delete the session server-side, create a fresh one, clear the UI
+    document.getElementById('clear').addEventListener('click', async () => {
+      if (!sessionId) return;
+      await fetch(`/session/${sessionId}`, { method: 'DELETE' });
+      await initSession();
+      document.getElementById('messages').innerHTML = '';
+      document.getElementById('status').textContent = '';
     });
+
+    // Ctrl+Enter to send
+    document.getElementById('input').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && e.ctrlKey) document.getElementById('send').click();
+    });
+
+    initSession();
   </script>
 </body>
 </html>
