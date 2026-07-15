@@ -64,6 +64,7 @@ setInterval(() => {
 app.post('/session', (req, res) => {
   const sessionId = crypto.randomUUID();
   getOrCreateSession(sessionId);
+  console.log(`[/session] created: ${sessionId}`);
   res.json({ sessionId });
 });
 
@@ -88,6 +89,7 @@ app.post('/chat', async (req, res) => {
 
   const session = getOrCreateSession(sessionId);
   session.messages.push({ role: 'user', content: message });
+  console.log(`[/chat] received:`, { message, sessionId });
 
   // Set SSE headers before any async work.
   // flushHeaders() sends them immediately — without it, Node.js buffers
@@ -143,6 +145,7 @@ app.post('/chat', async (req, res) => {
     // corrupting the conversation context for future turns.
     if (fullResponse) {
       session.messages.push({ role: 'assistant', content: fullResponse });
+      console.log(`[stream complete] ${fullResponse.length} chars`);
     }
 
     res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
