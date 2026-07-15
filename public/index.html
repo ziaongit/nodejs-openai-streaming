@@ -190,9 +190,9 @@
         status.textContent = '';
       } catch (err) {
         assistantBubble.textContent = `Request failed: ${err.message}`;
-        status.textContent = '';
       } finally {
         sendBtn.disabled = false;
+        status.textContent = '';
         input.focus();
       }
     });
